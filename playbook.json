@@ -1,0 +1,119 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Run_query_and_visualize_results": {
+                "inputs": {
+                    "body": "SecurityIncident\n| where TimeGenerated > ago(8h)\n| extend IncidentTime = todatetime(LastModifiedTime)\n| summarize LatestIncident = arg_max(IncidentTime, *) by IncidentNumber \n| project-away LastModifiedTime\n| project TimeGenerated, IncidentNumber, Title, Severity, Status, CreatedTime, ClosedTime, Owner.assignedTo, IncidentHandlingTime = LatestIncident - CreatedTime\n| extend SLAStatus = \n    case(\n        Severity == \"High\" and IncidentHandlingTime < 2h, \"Within SLA\",\n        Severity == \"Medium\" and IncidentHandlingTime < 6h, \"Within SLA\",\n        Severity == \"Low\" and IncidentHandlingTime < 12h, \"Within SLA\",\n        Severity == \"Informational\" and IncidentHandlingTime < 24h, \"Within SLA\",\n        \"Outside SLA\"\n    )",
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuremonitorlogs_1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "path": "/visualizeQuery",
+                    "queries": {
+                        "resourcegroups": "SOC-USAMA-RG",
+                        "resourcename": "Usama-SOC",
+                        "resourcetype": "Log Analytics Workspace",
+                        "subscriptions": "ec8aca77-5ea6-4353-99d0-cdd2b42827c7",
+                        "timerange": "Set in query",
+                        "visType": "Html Table"
+                    }
+                },
+                "runAfter": {},
+                "type": "ApiConnection"
+            },
+            "Send_an_email_(V2)": {
+                "inputs": {
+                    "body": {
+                        "Body": "<p><span style=\"font-size: 18px\"><strong>Here is the list of Incidents that were handled in the shift:<br>\n</strong></span><span style=\"font-size: 18px\"><strong>@{base64ToString(body('Run_query_and_visualize_results')?['attachmentContent'])}</strong></span><span style=\"font-size: 18px\"><strong><br>\n</strong></span><br>\n</p>",
+                        "Subject": "Shift Incident Report",
+                        "To": "usama.msaleem@systemsltd.com; osama.wasim@systemsltd.com"
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['office365_2']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "path": "/v2/Mail"
+                },
+                "runAfter": {
+                    "Run_query_and_visualize_results": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            },
+            "EmailAddress": {
+                "defaultValue": "usama.msaleem@systemdltd.com",
+                "type": "String"
+            },
+            "ResourceGroup": {
+                "defaultValue": "SOC-USAMA-RG",
+                "type": "String"
+            },
+            "ResourceName": {
+                "defaultValue": "Usama-SOC",
+                "type": "String"
+            }
+        },
+        "triggers": {
+            "Recurrence": {
+                "evaluatedRecurrence": {
+                    "frequency": "Day",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            "3",
+                            "11",
+                            "19"
+                        ]
+                    }
+                },
+                "recurrence": {
+                    "frequency": "Day",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            "3",
+                            "11",
+                            "19"
+                        ]
+                    }
+                },
+                "type": "Recurrence"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "azuremonitorlogs_1": {
+                    "connectionId": "/subscriptions/ec8aca77-5ea6-4353-99d0-cdd2b42827c7/resourceGroups/SOC-Usama-RG/providers/Microsoft.Web/connections/azuremonitorlogs",
+                    "connectionName": "azuremonitorlogs",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    },
+                    "id": "/subscriptions/ec8aca77-5ea6-4353-99d0-cdd2b42827c7/providers/Microsoft.Web/locations/eastus/managedApis/azuremonitorlogs"
+                },
+                "office365_2": {
+                    "connectionId": "/subscriptions/ec8aca77-5ea6-4353-99d0-cdd2b42827c7/resourceGroups/SOC-Usama-RG/providers/Microsoft.Web/connections/office365-1",
+                    "connectionName": "office365-1",
+                    "id": "/subscriptions/ec8aca77-5ea6-4353-99d0-cdd2b42827c7/providers/Microsoft.Web/locations/eastus/managedApis/office365"
+                }
+            }
+        }
+    }
+}
